@@ -1,0 +1,12 @@
+auth.json
+sessions/
+bin/
+git/
+npm/
+
+mcp-cache.json
+mcp-npx-cache.json
+mcp-onboarding.json
+
+*.log
+.DS_Store

@@ -2,18 +2,26 @@
   "lastChangelogVersion": "0.73.0",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.5",
-  "defaultThinkingLevel": "high",
+  "defaultThinkingLevel": "low",
   "terminal": {
     "showTerminalProgress": true
   },
   "theme": "ghostty-sync-545c9bd8",
   "packages": [
-    "npm:pi-subagents",
     "npm:@ogulcancelik/pi-ghostty-theme-sync",
     "npm:pi-notify",
     "npm:@juicesharp/rpiv-ask-user-question",
     "npm:@juicesharp/rpiv-web-tools",
     "npm:pi-mcp-adapter",
-    "npm:pi-gsd"
+    "npm:@danchamorro/pi-prompt-enhancer",
+    "npm:@victor-software-house/pi-curated-themes",
+    "npm:@juicesharp/rpiv-pi",
+    "npm:pi-rtk-optimizer",
+    "npm:@tintinweb/pi-subagents",
+    "npm:@juicesharp/rpiv-todo",
+    "npm:@juicesharp/rpiv-advisor",
+    "npm:@juicesharp/rpiv-btw",
+    "npm:@juicesharp/rpiv-i18n",
+    "npm:@juicesharp/rpiv-args"
   ]
 }

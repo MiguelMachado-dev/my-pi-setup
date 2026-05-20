@@ -1,0 +1,35 @@
+{
+  "name": "@ocodista/codex-usage-status",
+  "version": "0.1.0",
+  "description": "Show remaining Codex usage in the Pi status line.",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "codex",
+    "usage",
+    "status-line"
+  ],
+  "files": [
+    "assets/",
+    "index.ts",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/ocodista/codex-usage-status.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ocodista/codex-usage-status/issues"
+  },
+  "homepage": "https://github.com/ocodista/codex-usage-status#readme",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

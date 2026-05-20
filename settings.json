@@ -1,10 +1,13 @@
 {
-  "lastChangelogVersion": "0.73.0",
+  "lastChangelogVersion": "0.75.4",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.5",
-  "defaultThinkingLevel": "low",
+  "defaultThinkingLevel": "xhigh",
   "terminal": {
     "showTerminalProgress": true
+  },
+  "markdown": {
+    "compactSpacing": true
   },
   "theme": "ghostty-sync-545c9bd8",
   "packages": [
@@ -12,16 +15,16 @@
     "npm:pi-notify",
     "npm:@juicesharp/rpiv-ask-user-question",
     "npm:@juicesharp/rpiv-web-tools",
-    "npm:pi-mcp-adapter",
     "npm:@danchamorro/pi-prompt-enhancer",
-    "npm:@victor-software-house/pi-curated-themes",
-    "npm:@juicesharp/rpiv-pi",
     "npm:pi-rtk-optimizer",
     "npm:@tintinweb/pi-subagents",
     "npm:@juicesharp/rpiv-todo",
     "npm:@juicesharp/rpiv-advisor",
     "npm:@juicesharp/rpiv-btw",
     "npm:@juicesharp/rpiv-i18n",
-    "npm:@juicesharp/rpiv-args"
-  ]
+    "npm:@juicesharp/rpiv-args",
+    "npm:@aliou/pi-processes",
+    "npm:@narumitw/pi-goal"
+  ],
+  "shellPath": "/opt/homebrew/bin/fish"
 }

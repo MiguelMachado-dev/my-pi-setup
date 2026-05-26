@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.75.4",
+  "lastChangelogVersion": "0.75.5",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.5",
   "defaultThinkingLevel": "xhigh",
@@ -12,7 +12,6 @@
   "theme": "ghostty-sync-545c9bd8",
   "packages": [
     "npm:@ogulcancelik/pi-ghostty-theme-sync",
-    "npm:pi-notify",
     "npm:@juicesharp/rpiv-ask-user-question",
     "npm:@juicesharp/rpiv-web-tools",
     "npm:@danchamorro/pi-prompt-enhancer",
@@ -24,7 +23,14 @@
     "npm:@juicesharp/rpiv-i18n",
     "npm:@juicesharp/rpiv-args",
     "npm:@aliou/pi-processes",
-    "npm:@narumitw/pi-goal"
+    "npm:@narumitw/pi-goal",
+    "https://github.com/wobondar/pi-codex-fast",
+    {
+      "source": "npm:pi-cmux",
+      "skills": [],
+      "prompts": []
+    },
+    "npm:pi-skill-arg-hints"
   ],
   "shellPath": "/opt/homebrew/bin/fish"
 }

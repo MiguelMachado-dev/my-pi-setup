@@ -318,114 +318,193 @@ export default function (pi: ExtensionAPI) {
 	let settings = DEFAULT_SETTINGS;
 	let turns = 0;
 	let timer: ReturnType<typeof setInterval> | undefined;
-	let inFlight: Promise<boolean> | undefined;
-	let latestCtx: ExtensionContext | undefined;
+	let inFlight: { sessionId: number; promise: Promise<boolean> } | undefined;
+	let activeSessionId = 0;
+	let sessionAbort: AbortController | undefined;
 
-	const setLoadingStatus = (ctx: ExtensionContext) => {
-		if (!ctx.hasUI) return;
-		if (!getToken()) {
-			ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM: log in via /login or set ZAI_API_KEY"));
-			return;
+	const isStaleCtxError = (error: unknown): boolean =>
+		error instanceof Error && error.message.includes("extension ctx is stale");
+
+	const stopTimer = () => {
+		if (timer) {
+			clearInterval(timer);
+			timer = undefined;
 		}
-		const cadence = settings.everyTurns > 0 ? (settings.everyTurns === 1 ? "each turn" : `every ${settings.everyTurns} turns`) : null;
-		const timerLabel = settings.refreshMs > 0 ? `+ ${(settings.refreshMs / 60_000).toFixed(0)}m timer` : null;
-		const label = [cadence, timerLabel].filter(Boolean).join(" ") || "on-demand";
-		ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", `GLM usage · ${label}`));
 	};
 
-	const refreshStatus = (ctx: ExtensionContext): Promise<boolean> => {
-		if (!ctx.hasUI) return Promise.resolve(false);
-		if (!getToken()) {
-			ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM: log in via /login or set ZAI_API_KEY"));
-			return Promise.resolve(false);
+	const endSession = () => {
+		activeSessionId += 1;
+		sessionAbort?.abort();
+		sessionAbort = undefined;
+		inFlight = undefined;
+		stopTimer();
+	};
+
+	const beginSession = (): number => {
+		endSession();
+		sessionAbort = new AbortController();
+		return activeSessionId;
+	};
+
+	const isCurrentSession = (sessionId: number): boolean =>
+		sessionId === activeSessionId && !(sessionAbort?.signal.aborted ?? true);
+
+	const handleStaleCtx = (error: unknown): boolean => {
+		if (!isStaleCtxError(error)) return false;
+		endSession();
+		return true;
+	};
+
+	const runWithLiveCtx = (sessionId: number, action: () => void): void => {
+		if (!isCurrentSession(sessionId)) return;
+		try {
+			action();
+		} catch (error) {
+			if (!handleStaleCtx(error)) throw error;
 		}
-		if (inFlight) return inFlight;
-		inFlight = fetchQuota(ctx.signal)
-			.then((quota) => {
+	};
+
+	const setLoadingStatus = (ctx: ExtensionContext, sessionId = activeSessionId) => {
+		runWithLiveCtx(sessionId, () => {
+			if (!ctx.hasUI) return;
+			if (!getToken()) {
+				ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM: log in via /login or set ZAI_API_KEY"));
+				return;
+			}
+			const cadence = settings.everyTurns > 0 ? (settings.everyTurns === 1 ? "each turn" : `every ${settings.everyTurns} turns`) : null;
+			const timerLabel = settings.refreshMs > 0 ? `+ ${(settings.refreshMs / 60_000).toFixed(0)}m timer` : null;
+			const label = [cadence, timerLabel].filter(Boolean).join(" ") || "on-demand";
+			ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", `GLM usage · ${label}`));
+		});
+	};
+
+	const refreshStatus = (ctx: ExtensionContext, sessionId = activeSessionId): Promise<boolean> => {
+		if (!isCurrentSession(sessionId)) return Promise.resolve(false);
+		if (inFlight?.sessionId === sessionId) return inFlight.promise;
+
+		const promise = (async () => {
+			try {
+				if (!isCurrentSession(sessionId) || !ctx.hasUI) return false;
+				if (!getToken()) {
+					ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM: log in via /login or set ZAI_API_KEY"));
+					return false;
+				}
+				const quota = await fetchQuota(sessionAbort?.signal);
+				if (!isCurrentSession(sessionId)) return false;
 				if (quota) {
 					ctx.ui.setStatus(STATUS_KEY, footer(ctx, quota));
 					return true;
 				}
 				ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM usage unavailable"));
 				return false;
-			})
-			.catch(() => {
-				ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM usage unavailable"));
+			} catch (error) {
+				if (handleStaleCtx(error) || !isCurrentSession(sessionId)) return false;
+				runWithLiveCtx(sessionId, () => {
+					if (ctx.hasUI) ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM usage unavailable"));
+				});
 				return false;
-			})
-			.finally(() => {
-				inFlight = undefined;
-			});
-		return inFlight;
+			}
+		})().catch((error) => {
+			if (!handleStaleCtx(error)) console.error(`[${ID}] refresh failed`, error);
+			return false;
+		});
+
+		inFlight = { sessionId, promise };
+		void promise.finally(() => {
+			if (inFlight?.sessionId === sessionId && inFlight.promise === promise) inFlight = undefined;
+		});
+		return promise;
 	};
 
-	const showDetail = async (ctx: ExtensionContext) => {
-		if (!ctx.hasUI) return;
-		if (!getToken()) {
-			ctx.ui.notify("GLM: log in via /login or set ZAI_API_KEY to check usage", "error");
-			return;
-		}
-		ctx.ui.setWidget(STATUS_KEY, [ctx.ui.theme.fg("dim", "GLM usage loading…")]);
-		const snapshot = await fetchSnapshot(ctx.signal).catch(() => ({ quota: null, model: null, tool: null, at: Date.now() }) as Snapshot);
-		if (snapshot.quota) {
-			ctx.ui.setStatus(STATUS_KEY, footer(ctx, snapshot.quota));
-			ctx.ui.setWidget(STATUS_KEY, detailLines(snapshot));
-			ctx.ui.notify("GLM usage refreshed", "info");
-		} else {
-			ctx.ui.setWidget(STATUS_KEY, undefined);
-			ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM usage unavailable"));
-			ctx.ui.notify("GLM usage unavailable — check ZAI_API_KEY / network", "error");
+	const showDetail = async (ctx: ExtensionContext, sessionId = activeSessionId) => {
+		try {
+			if (!isCurrentSession(sessionId) || !ctx.hasUI) return;
+			if (!getToken()) {
+				ctx.ui.notify("GLM: log in via /login or set ZAI_API_KEY to check usage", "error");
+				return;
+			}
+			ctx.ui.setWidget(STATUS_KEY, [ctx.ui.theme.fg("dim", "GLM usage loading…")]);
+			const snapshot = await fetchSnapshot(sessionAbort?.signal).catch(() => ({ quota: null, model: null, tool: null, at: Date.now() }) as Snapshot);
+			if (!isCurrentSession(sessionId)) return;
+			if (snapshot.quota) {
+				ctx.ui.setStatus(STATUS_KEY, footer(ctx, snapshot.quota));
+				ctx.ui.setWidget(STATUS_KEY, detailLines(snapshot));
+				ctx.ui.notify("GLM usage refreshed", "info");
+			} else {
+				ctx.ui.setWidget(STATUS_KEY, undefined);
+				ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM usage unavailable"));
+				ctx.ui.notify("GLM usage unavailable — check ZAI_API_KEY / network", "error");
+			}
+		} catch (error) {
+			if (!handleStaleCtx(error)) throw error;
 		}
 	};
 
-	const startTimer = (ctx: ExtensionContext) => {
-		if (timer) clearInterval(timer);
-		if (settings.refreshMs <= 0) return;
+	const startTimer = (ctx: ExtensionContext, sessionId = activeSessionId) => {
+		stopTimer();
+		if (!isCurrentSession(sessionId) || settings.refreshMs <= 0) return;
 		timer = setInterval(() => {
-			if (latestCtx) void refreshStatus(latestCtx);
+			if (!isCurrentSession(sessionId)) {
+				stopTimer();
+				return;
+			}
+			void refreshStatus(ctx, sessionId).catch((error) => {
+				if (!handleStaleCtx(error)) console.error(`[${ID}] refresh failed`, error);
+			});
 		}, settings.refreshMs);
 	};
 
 	pi.registerCommand("glm", {
 		description: "Show Z.AI GLM Coding Plan usage (5h + weekly + MCP + 24h tokens)",
 		handler: async (_args, ctx) => {
-			await showDetail(ctx);
+			await showDetail(ctx, activeSessionId);
 		},
 	});
 
 	pi.registerCommand("glm-usage:refresh", {
 		description: "Refresh the GLM usage footer now",
 		handler: async (_args, ctx) => {
-			const ok = await refreshStatus(ctx);
-			if (ctx.hasUI) ctx.ui.notify(ok ? "GLM usage refreshed" : "GLM usage unavailable", ok ? "info" : "error");
+			const sessionId = activeSessionId;
+			const ok = await refreshStatus(ctx, sessionId);
+			runWithLiveCtx(sessionId, () => {
+				if (ctx.hasUI) ctx.ui.notify(ok ? "GLM usage refreshed" : "GLM usage unavailable", ok ? "info" : "error");
+			});
 		},
 	});
 
 	pi.registerCommand("glm-usage:hide", {
 		description: "Hide the GLM usage detail panel",
 		handler: async (_args, ctx) => {
-			if (ctx.hasUI) ctx.ui.setWidget(STATUS_KEY, undefined);
+			runWithLiveCtx(activeSessionId, () => {
+				if (ctx.hasUI) ctx.ui.setWidget(STATUS_KEY, undefined);
+			});
 		},
 	});
 
 	pi.registerCommand("glm-usage:settings", {
 		description: "Configure GLM usage auto-refresh cadence",
 		handler: async (_args, ctx) => {
-			if (!ctx.hasUI) return;
-			const current = settings.everyTurns > 0
-				? settings.everyTurns === 1 ? "Each turn" : `Every ${settings.everyTurns} turns`
-				: "Off";
-			const choice = await ctx.ui.select(`GLM usage auto-refresh (now: ${current})`, CADENCE_PRESETS.map((preset) => preset.label));
-			if (!choice) return;
-			const preset = CADENCE_PRESETS.find((item) => item.label === choice);
-			if (!preset) return;
-			settings = { ...preset.value };
-			turns = 0;
-			await writeSettings(settings);
-			startTimer(ctx);
-			setLoadingStatus(ctx);
-			void refreshStatus(ctx);
-			ctx.ui.notify(`GLM usage auto-refresh: ${choice}`, "info");
+			const sessionId = activeSessionId;
+			try {
+				if (!isCurrentSession(sessionId) || !ctx.hasUI) return;
+				const current = settings.everyTurns > 0
+					? settings.everyTurns === 1 ? "Each turn" : `Every ${settings.everyTurns} turns`
+					: "Off";
+				const choice = await ctx.ui.select(`GLM usage auto-refresh (now: ${current})`, CADENCE_PRESETS.map((preset) => preset.label));
+				if (!choice || !isCurrentSession(sessionId)) return;
+				const preset = CADENCE_PRESETS.find((item) => item.label === choice);
+				if (!preset) return;
+				settings = { ...preset.value };
+				turns = 0;
+				await writeSettings(settings);
+				if (!isCurrentSession(sessionId)) return;
+				startTimer(ctx, sessionId);
+				setLoadingStatus(ctx, sessionId);
+				void refreshStatus(ctx, sessionId);
+				ctx.ui.notify(`GLM usage auto-refresh: ${choice}`, "info");
+			} catch (error) {
+				if (!handleStaleCtx(error)) throw error;
+			}
 		},
 	});
 
@@ -453,33 +532,32 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
-		latestCtx = ctx;
+		const sessionId = beginSession();
 		cachedAuth = undefined;
 		settings = await readSettings();
+		if (!isCurrentSession(sessionId)) return;
 		turns = 0;
-		setLoadingStatus(ctx);
-		startTimer(ctx);
-		void refreshStatus(ctx);
+		setLoadingStatus(ctx, sessionId);
+		startTimer(ctx, sessionId);
+		void refreshStatus(ctx, sessionId);
 	});
 
 	pi.on("turn_end", (_event, ctx) => {
-		latestCtx = ctx;
+		const sessionId = activeSessionId;
+		if (!isCurrentSession(sessionId)) return;
 		turns += 1;
 		if (settings.everyTurns <= 0 || turns < settings.everyTurns) return;
 		turns = 0;
-		void refreshStatus(ctx);
+		void refreshStatus(ctx, sessionId);
 	});
 
 	pi.on("input", (_event, ctx) => {
-		latestCtx = ctx;
-		if (ctx.hasUI) ctx.ui.setWidget(STATUS_KEY, undefined);
+		runWithLiveCtx(activeSessionId, () => {
+			if (ctx.hasUI) ctx.ui.setWidget(STATUS_KEY, undefined);
+		});
 	});
 
 	pi.on("session_shutdown", () => {
-		if (timer) {
-			clearInterval(timer);
-			timer = undefined;
-		}
-		latestCtx = undefined;
+		endSession();
 	});
 }

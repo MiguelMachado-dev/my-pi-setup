@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.75.5",
+  "lastChangelogVersion": "0.79.10",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.5",
   "defaultThinkingLevel": "xhigh",
@@ -30,7 +30,8 @@
       "skills": [],
       "prompts": []
     },
-    "npm:pi-skill-arg-hints"
+    "npm:pi-skill-arg-hints",
+    "npm:pi-mcp-adapter"
   ],
   "shellPath": "/opt/homebrew/bin/fish"
 }

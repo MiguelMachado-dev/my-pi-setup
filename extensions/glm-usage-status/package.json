@@ -1,0 +1,27 @@
+{
+  "name": "glm-usage-status",
+  "version": "0.1.0",
+  "description": "Show Z.AI GLM Coding Plan usage (5h + weekly + MCP) in the pi status line.",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "zai",
+    "glm",
+    "usage",
+    "status-line"
+  ],
+  "files": [
+    "index.ts",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

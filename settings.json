@@ -1,13 +1,10 @@
 {
-  "lastChangelogVersion": "0.79.10",
+  "lastChangelogVersion": "0.80.6",
   "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.5",
-  "defaultThinkingLevel": "xhigh",
+  "defaultModel": "gpt-5.6-sol",
+  "defaultThinkingLevel": "medium",
   "terminal": {
     "showTerminalProgress": true
-  },
-  "markdown": {
-    "compactSpacing": true
   },
   "theme": "ghostty-sync-545c9bd8",
   "packages": [
@@ -24,14 +21,15 @@
     "npm:@juicesharp/rpiv-args",
     "npm:@aliou/pi-processes",
     "npm:@narumitw/pi-goal",
-    "https://github.com/wobondar/pi-codex-fast",
     {
       "source": "npm:pi-cmux",
       "skills": [],
       "prompts": []
     },
     "npm:pi-skill-arg-hints",
-    "npm:pi-mcp-adapter"
+    "npm:pi-mcp-adapter",
+    "npm:pi-openai-fast-mode"
   ],
-  "shellPath": "/opt/homebrew/bin/fish"
+  "shellPath": "/opt/homebrew/bin/fish",
+  "hideThinkingBlock": false
 }

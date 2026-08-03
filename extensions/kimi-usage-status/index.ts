@@ -5,27 +5,21 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-const ID = "glm-usage-status";
-const STATUS_KEY = "glm-usage";
+const ID = "kimi-usage-status";
+const STATUS_KEY = "kimi-usage";
 const SETTINGS_PATH = join(homedir(), ".pi", "agent", "extensions", ID, "settings.json");
 const AUTH_PATH = join(homedir(), ".pi", "agent", "auth.json");
-const DEFAULT_BASE = "https://api.z.ai";
+const DEFAULT_BASE = "https://api.kimi.com/coding/v1";
+const USER_AGENT = "KimiCLI/1.6";
 const BAR_WIDTH = 12;
 const FETCH_TIMEOUT_MS = 8_000;
-
-const TOKEN_LIMIT_TYPE = "TOKENS_LIMIT";
-const TIME_LIMIT_TYPE = "TIME_LIMIT";
-const FIVE_HOUR = { unit: 3, number: 5 };
-const WEEKLY = { unit: 6, number: 1 };
+const SIX_HOURS_MIN = 6 * 60;
 
 type Json = Record<string, unknown>;
 type Window = { label: string; usedPct: number | null; reset: Date | null };
-type Mcp = { usedPct: number | null; current: number | null; total: number | null };
-type GlmQuota = { level: string | null; fiveHour: Window | null; weekly: Window | null; mcp: Mcp | null };
-type ModelUsage = { tokens: number | null; calls: number | null };
-type ToolUsage = { searches: number | null; webReads: number | null; zreads: number | null };
+type KimiQuota = { level: string | null; fiveHour: Window | null; weekly: Window | null; parallel: number | null };
 type Settings = { everyTurns: number; refreshMs: number };
-type Snapshot = { quota: GlmQuota | null; model: ModelUsage | null; tool: ToolUsage | null; at: number };
+type Snapshot = { quota: KimiQuota | null; at: number };
 
 const DEFAULT_SETTINGS: Settings = { everyTurns: 5, refreshMs: 300_000 };
 const CADENCE_PRESETS: Array<{ label: string; value: Settings }> = [
@@ -33,11 +27,11 @@ const CADENCE_PRESETS: Array<{ label: string; value: Settings }> = [
 	{ label: "Each turn + 5m timer", value: { everyTurns: 1, refreshMs: 300_000 } },
 	{ label: "Every 10 turns + 5m timer", value: { everyTurns: 10, refreshMs: 300_000 } },
 	{ label: "Timer only — 1m", value: { everyTurns: 0, refreshMs: 60_000 } },
-	{ label: "Off — manual /glm only", value: { everyTurns: 0, refreshMs: 0 } },
+	{ label: "Off — manual /kimi only", value: { everyTurns: 0, refreshMs: 0 } },
 ];
 
 const isJson = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
-const obj = (parent: Json, key: string) => (isJson(parent[key]) ? parent[key] : null);
+const obj = (parent: Json | null, key: string): Json | null => (parent && isJson(parent[key]) ? parent[key] : null);
 const finite = (value: unknown): number | null => {
 	if (typeof value === "number" && Number.isFinite(value)) return value;
 	if (typeof value === "string" && value) {
@@ -49,12 +43,6 @@ const finite = (value: unknown): number | null => {
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const remainingPct = (usedPct: number | null): number | null =>
 	usedPct === null ? null : clamp(Math.round((100 - usedPct) * 100) / 100, 0, 100);
-const epochDate = (value: number | null): Date | null => {
-	if (value === null) return null;
-	const date = new Date(value > 1e10 ? value : value * 1000);
-	return Number.isFinite(date.getTime()) ? date : null;
-};
-const fmtNum = (value: number | null): string => (value === null ? "—" : value.toLocaleString("en-US"));
 const parse = (text: string): unknown => {
 	try {
 		return JSON.parse(text);
@@ -62,6 +50,20 @@ const parse = (text: string): unknown => {
 		return null;
 	}
 };
+
+function parseReset(value: unknown): Date | null {
+	if (typeof value === "number" && Number.isFinite(value)) {
+		const date = new Date(value > 1e10 ? value : value * 1000);
+		return Number.isFinite(date.getTime()) ? date : null;
+	}
+	if (typeof value === "string" && value) {
+		const date = new Date(value);
+		if (Number.isFinite(date.getTime())) return date;
+		const asNumber = Number(value);
+		if (Number.isFinite(asNumber)) return parseReset(asNumber);
+	}
+	return null;
+}
 
 async function readSettings(): Promise<Settings> {
 	try {
@@ -83,7 +85,7 @@ async function writeSettings(settings: Settings): Promise<void> {
 }
 
 function getBaseUrl(): string {
-	const override = process.env.ZAI_BASE_URL || process.env.ZHIPU_BASE_URL;
+	const override = process.env.KIMI_BASE_URL;
 	return override ? override.replace(/\/$/, "") : DEFAULT_BASE;
 }
 let cachedAuth: Json | null | undefined;
@@ -98,7 +100,7 @@ function readAuth(): Json | null {
 	return cachedAuth;
 }
 function keyFromAuth(providerId: string): string | null {
-	const entry = obj(readAuth() ?? {}, providerId);
+	const entry = obj(readAuth(), providerId);
 	if (!entry) return null;
 	const type = typeof entry.type === "string" ? entry.type : "api_key";
 	if (type !== "api_key") return null;
@@ -106,8 +108,7 @@ function keyFromAuth(providerId: string): string | null {
 	return typeof key === "string" && key ? key : null;
 }
 function getToken(): string | null {
-	const authId = getBaseUrl().includes("bigmodel.cn") ? "zai-coding-cn" : "zai";
-	return keyFromAuth(authId) ?? process.env.ZAI_API_KEY ?? process.env.ZAI_TOKEN ?? process.env.ZHIPU_API_KEY ?? process.env.ZHIPUAI_API_KEY ?? null;
+	return keyFromAuth("kimi-coding") ?? process.env.KIMI_API_KEY ?? process.env.KIMI_CODING_API_KEY ?? null;
 }
 
 async function getJson(path: string, signal: AbortSignal | undefined): Promise<Json | null> {
@@ -120,8 +121,8 @@ async function getJson(path: string, signal: AbortSignal | undefined): Promise<J
 			method: "GET",
 			signal: controller.signal,
 			headers: {
-				Authorization: getToken() as string,
-				"Accept-Language": "en-US,en",
+				Authorization: `Bearer ${getToken() as string}`,
+				"User-Agent": USER_AGENT,
 				"Content-Type": "application/json",
 			},
 		});
@@ -135,98 +136,90 @@ async function getJson(path: string, signal: AbortSignal | undefined): Promise<J
 	}
 }
 
-function classifyTokenWindow(limit: Json): "fiveHour" | "weekly" | null {
-	const unit = finite(limit.unit);
-	const number = finite(limit.number);
-	if (unit === FIVE_HOUR.unit && number === FIVE_HOUR.number) return "fiveHour";
-	if (unit === WEEKLY.unit && number === WEEKLY.number) return "weekly";
+/** Used % from a {limit, used, remaining} detail object (Kimi reports 0–100 percentage points as strings). */
+function usedPctFrom(detail: Json | null): number | null {
+	if (!detail) return null;
+	const limit = finite(detail.limit ?? detail.limit_amount);
+	const used = finite(detail.used ?? detail.used_amount);
+	if (used !== null && limit !== null && limit > 0) return clamp((used / limit) * 100, 0, 100);
+	const remaining = finite(detail.remaining);
+	if (remaining !== null && limit !== null && limit > 0) return clamp(((limit - remaining) / limit) * 100, 0, 100);
 	return null;
 }
-function windowFromLimit(limit: Json, fallbackLabel: string): Window {
+
+function windowMinutes(window: Json | null): number | null {
+	const duration = finite(window?.duration);
+	if (duration === null || duration <= 0) return null;
+	const unit = (typeof window?.timeUnit === "string" ? window.timeUnit : "").toUpperCase();
+	if (unit.includes("MINUTE")) return duration;
+	if (unit.includes("HOUR")) return duration * 60;
+	if (unit.includes("DAY")) return duration * 1440;
+	if (unit.includes("MONTH")) return duration * 43_200;
+	return duration;
+}
+
+function windowLabel(window: Json | null, fallback: string): string {
+	const minutes = windowMinutes(window);
+	if (minutes === null) return fallback;
+	if (minutes % 43_200 === 0) return `${minutes / 43_200}mo`;
+	if (minutes % 1440 === 0) return `${minutes / 1440}d`;
+	if (minutes % 60 === 0) return `${minutes / 60}h`;
+	return `${minutes}m`;
+}
+
+function windowFromDetail(detail: Json | null, label: string): Window {
 	return {
-		label: fallbackLabel,
-		usedPct: finite(limit.percentage),
-		reset: epochDate(finite(limit.nextResetTime) ?? finite(limit.resetTime)),
+		label,
+		usedPct: usedPctFrom(detail),
+		reset: parseReset(detail?.resetTime ?? detail?.reset_at ?? detail?.reset_time),
 	};
 }
-function extractQuota(json: Json | null): GlmQuota | null {
-	if (!json) return null;
-	const payload = isJson(json.data) ? json.data : json;
-	const limitsRaw = Array.isArray(payload.limits) ? payload.limits.filter(isJson) : [];
-	if (limitsRaw.length === 0 && payload.level == null) return null;
 
-	const level = typeof payload.level === "string" && payload.level ? payload.level : null;
+function extractQuota(json: Json | null): KimiQuota | null {
+	if (!json) return null;
+	const data = obj(json, "data");
+	const payload = data && ("usage" in data || "limits" in data || "user" in data) ? data : json;
+
+	const levelRaw = obj(obj(payload, "user"), "membership")?.level;
+	const level = typeof levelRaw === "string" && levelRaw ? levelRaw.replace(/^LEVEL_/, "").toLowerCase() : null;
+
+	const parallel = finite(obj(payload, "parallel")?.limit);
+
+	// `usage` is the weekly quota window; `limits[]` holds shorter rate windows (e.g. 300 min = 5h).
+	const usageDetail = obj(payload, "usage");
+	let weekly = usageDetail ? windowFromDetail(usageDetail, "Week") : null;
 	let fiveHour: Window | null = null;
-	let weekly: Window | null = null;
-	let mcp: Mcp | null = null;
 
-	for (const limit of limitsRaw) {
-		const type = typeof limit.type === "string" ? limit.type : null;
-		if (type === TIME_LIMIT_TYPE) {
-			mcp = { usedPct: finite(limit.percentage), current: finite(limit.currentValue), total: finite(limit.usage) };
-			continue;
+	const limitsRaw = Array.isArray(payload.limits) ? payload.limits.filter(isJson) : [];
+	for (const entry of limitsRaw) {
+		const detail = obj(entry, "detail") ?? entry;
+		const window = obj(entry, "window");
+		const minutes = windowMinutes(window);
+		const label = windowLabel(window, "Limit");
+		const candidate = windowFromDetail(detail, label);
+		if (minutes !== null && minutes <= SIX_HOURS_MIN) {
+			if (!fiveHour) fiveHour = candidate;
+		} else if (!weekly) {
+			weekly = { ...candidate, label: "Week" };
 		}
-		if (type !== TOKEN_LIMIT_TYPE) continue;
-		const slot = classifyTokenWindow(limit);
-		if (slot === "fiveHour" && !fiveHour) fiveHour = windowFromLimit(limit, "5h");
-		else if (slot === "weekly" && !weekly) weekly = windowFromLimit(limit, "Weekly");
 	}
 
-	for (const limit of limitsRaw) {
-		if (typeof limit.type !== "string" || limit.type !== TOKEN_LIMIT_TYPE) continue;
-		if (classifyTokenWindow(limit)) continue;
-		const reset = epochDate(finite(limit.nextResetTime) ?? finite(limit.resetTime));
-		const withinFiveHours = reset ? reset.getTime() - Date.now() <= 6 * 3_600_000 : true;
-		if (!fiveHour && withinFiveHours) fiveHour = windowFromLimit(limit, "5h");
-		else if (!weekly) weekly = windowFromLimit(limit, "Weekly");
-	}
-
-	if (!fiveHour && !weekly && !mcp && !level) return null;
-	return { level, fiveHour, weekly, mcp };
-}
-function extractModelUsage(json: Json | null): ModelUsage | null {
-	if (!json) return null;
-	const payload = isJson(json.data) ? json.data : json;
-	const total = obj(payload, "totalUsage");
-	if (!total) return null;
-	return { tokens: finite(total.totalTokensUsage), calls: finite(total.totalModelCallCount) };
-}
-function extractToolUsage(json: Json | null): ToolUsage | null {
-	if (!json) return null;
-	const payload = isJson(json.data) ? json.data : json;
-	const total = obj(payload, "totalUsage");
-	if (!total) return null;
-	return {
-		searches: finite(total.totalNetworkSearchCount),
-		webReads: finite(total.totalWebReadMcpCount),
-		zreads: finite(total.totalZreadMcpCount),
-	};
+	if (weekly && weekly.usedPct === null && !weekly.reset) weekly = null;
+	if (fiveHour && fiveHour.usedPct === null && !fiveHour.reset) fiveHour = null;
+	if (!fiveHour && !weekly && !level) return null;
+	return { level, fiveHour, weekly, parallel };
 }
 
-function timeWindowQuery(): string {
-	const now = new Date();
-	const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, now.getHours(), 0, 0, 0);
-	const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 59, 59, 999);
-	const iso = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`;
-	return `startTime=${encodeURIComponent(iso(start))}&endTime=${encodeURIComponent(iso(end))}`;
-}
-
-async function fetchQuota(signal?: AbortSignal): Promise<GlmQuota | null> {
-	return extractQuota(await getJson("/api/monitor/usage/quota/limit", signal));
-}
-async function fetchModel(signal?: AbortSignal): Promise<ModelUsage | null> {
-	return extractModelUsage(await getJson(`/api/monitor/usage/model-usage?${timeWindowQuery()}`, signal));
-}
-async function fetchTool(signal?: AbortSignal): Promise<ToolUsage | null> {
-	return extractToolUsage(await getJson(`/api/monitor/usage/tool-usage?${timeWindowQuery()}`, signal));
+async function fetchQuota(signal?: AbortSignal): Promise<KimiQuota | null> {
+	const primary = await getJson("/usages", signal).catch(() => null);
+	const quota = extractQuota(primary);
+	if (quota) return quota;
+	const fallback = await getJson("/usage", signal).catch(() => null);
+	return extractQuota(fallback);
 }
 async function fetchSnapshot(signal?: AbortSignal): Promise<Snapshot> {
-	const [quota, model, tool] = await Promise.all([
-		fetchQuota(signal).catch(() => null),
-		fetchModel(signal).catch(() => null),
-		fetchTool(signal).catch(() => null),
-	]);
-	return { quota, model, tool, at: Date.now() };
+	const quota = await fetchQuota(signal).catch(() => null);
+	return { quota, at: Date.now() };
 }
 
 function resetText(date: Date | null): string {
@@ -253,17 +246,17 @@ function colorByRemaining(ctx: ExtensionContext, remaining: number | null, text:
 }
 function planLabel(level: string | null): string {
 	if (!level) return "";
-	const lower = level.toLowerCase();
-	return lower.charAt(0).toUpperCase() + lower.slice(1);
+	return level.charAt(0).toUpperCase() + level.slice(1);
 }
 
-function footer(ctx: ExtensionContext, quota: GlmQuota): string {
+function footer(ctx: ExtensionContext, quota: KimiQuota): string {
 	const theme = ctx.ui.theme;
 	const five = remainingPct(quota.fiveHour?.usedPct ?? null);
 	const week = remainingPct(quota.weekly?.usedPct ?? null);
+	const fiveLabel = quota.fiveHour?.label ?? "5h";
 	return [
-		theme.fg("dim", "GLM "),
-		theme.fg("muted", "5h "),
+		theme.fg("dim", "Kimi "),
+		theme.fg("muted", `${fiveLabel} `),
 		colorByRemaining(ctx, five, fmtPct(five)),
 		theme.fg("dim", ` ${resetText(quota.fiveHour?.reset ?? null)} | W `),
 		colorByRemaining(ctx, week, fmtPct(week)),
@@ -275,40 +268,25 @@ function bar(label: string, window: Window | null): string {
 	const used = clamp(window.usedPct, 0, 100);
 	const filled = Math.round((used / 100) * BAR_WIDTH);
 	const barStr = `${"█".repeat(filled)}${"░".repeat(BAR_WIDTH - filled)}`;
-	const reset = window.reset ? ` · resets ${countdown(window.reset)} (${resetText(window.reset).toLowerCase()})` : "";
+	const resetStr = resetText(window.reset);
+	const reset = window.reset ? ` · resets ${countdown(window.reset)} (${/[AP]M$/i.test(resetStr) ? resetStr.toLowerCase() : resetStr})` : "";
 	return `${label} ${used.toFixed(1).padStart(5)}% ${barStr} ${Math.round(100 - used)}% left${reset}`;
 }
 function detailLines(snapshot: Snapshot): string[] {
-	const { quota, model, tool } = snapshot;
+	const { quota } = snapshot;
 	const lines: string[] = [];
-	lines.push(`📊 GLM Coding Plan${quota?.level ? ` — ${planLabel(quota.level)}` : ""}`);
-	lines.push(bar("⏱️ 5h    ", quota?.fiveHour ?? null));
+	lines.push(`📊 Kimi Coding Plan${quota?.level ? ` — ${planLabel(quota.level)}` : ""}`);
+	lines.push(bar(`⏱️ ${(quota?.fiveHour?.label ?? "5h").padEnd(5)}`, quota?.fiveHour ?? null));
 	lines.push(bar("📅 Week  ", quota?.weekly ?? null));
-	if (quota?.mcp) {
-		const mcpPct = quota.mcp.usedPct;
-		const pctStr = mcpPct === null ? "--" : `${mcpPct.toFixed(1)}%`;
-		const usage = quota.mcp.current !== null && quota.mcp.total !== null ? `  ${fmtNum(quota.mcp.current)} / ${fmtNum(quota.mcp.total)}` : "";
-		lines.push(`🔌 MCP    ${pctStr}${usage}  (1 month)`);
-	}
-	if (model && (model.tokens !== null || model.calls !== null)) {
-		const parts: string[] = [];
-		if (model.tokens !== null) parts.push(`${fmtNum(model.tokens)} tokens`);
-		if (model.calls !== null) parts.push(`${fmtNum(model.calls)} calls`);
-		lines.push(`🔢 24h    ${parts.join(" · ")}`);
-	}
-	if (tool) {
-		const parts: string[] = [];
-		if (tool.searches !== null) parts.push(`${fmtNum(tool.searches)} searches`);
-		if (tool.webReads !== null) parts.push(`${fmtNum(tool.webReads)} web reads`);
-		if (tool.zreads !== null) parts.push(`${fmtNum(tool.zreads)} zreads`);
-		if (parts.length) lines.push(`🛠️ Tools  ${parts.join(" · ")}`);
+	if (quota?.parallel !== null && quota?.parallel !== undefined) {
+		lines.push(`⚡ Parallel  ${quota.parallel} max concurrent`);
 	}
 	lines.push(updatedLine(snapshot.at));
 	return lines;
 }
 function updatedLine(at: number): string {
 	const when = new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-	return `updated ${when} · /glm-usage:refresh`;
+	return `updated ${when} · /kimi-usage:refresh`;
 }
 function detailText(snapshot: Snapshot): string {
 	return detailLines(snapshot).join("\n");
@@ -368,13 +346,13 @@ export default function (pi: ExtensionAPI) {
 		runWithLiveCtx(sessionId, () => {
 			if (!ctx.hasUI) return;
 			if (!getToken()) {
-				ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM: log in via /login or set ZAI_API_KEY"));
+				ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "Kimi: log in via /login or set KIMI_API_KEY"));
 				return;
 			}
 			const cadence = settings.everyTurns > 0 ? (settings.everyTurns === 1 ? "each turn" : `every ${settings.everyTurns} turns`) : null;
 			const timerLabel = settings.refreshMs > 0 ? `+ ${(settings.refreshMs / 60_000).toFixed(0)}m timer` : null;
 			const label = [cadence, timerLabel].filter(Boolean).join(" ") || "on-demand";
-			ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", `GLM usage · ${label}`));
+			ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", `Kimi usage · ${label}`));
 		});
 	};
 
@@ -386,7 +364,7 @@ export default function (pi: ExtensionAPI) {
 			try {
 				if (!isCurrentSession(sessionId) || !ctx.hasUI) return false;
 				if (!getToken()) {
-					ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM: log in via /login or set ZAI_API_KEY"));
+					ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "Kimi: log in via /login or set KIMI_API_KEY"));
 					return false;
 				}
 				const quota = await fetchQuota(sessionAbort?.signal);
@@ -395,12 +373,12 @@ export default function (pi: ExtensionAPI) {
 					ctx.ui.setStatus(STATUS_KEY, footer(ctx, quota));
 					return true;
 				}
-				ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM usage unavailable"));
+				ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "Kimi usage unavailable"));
 				return false;
 			} catch (error) {
 				if (handleStaleCtx(error) || !isCurrentSession(sessionId)) return false;
 				runWithLiveCtx(sessionId, () => {
-					if (ctx.hasUI) ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM usage unavailable"));
+					if (ctx.hasUI) ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "Kimi usage unavailable"));
 				});
 				return false;
 			}
@@ -420,20 +398,20 @@ export default function (pi: ExtensionAPI) {
 		try {
 			if (!isCurrentSession(sessionId) || !ctx.hasUI) return;
 			if (!getToken()) {
-				ctx.ui.notify("GLM: log in via /login or set ZAI_API_KEY to check usage", "error");
+				ctx.ui.notify("Kimi: log in via /login or set KIMI_API_KEY to check usage", "error");
 				return;
 			}
-			ctx.ui.setWidget(STATUS_KEY, [ctx.ui.theme.fg("dim", "GLM usage loading…")]);
-			const snapshot = await fetchSnapshot(sessionAbort?.signal).catch(() => ({ quota: null, model: null, tool: null, at: Date.now() }) as Snapshot);
+			ctx.ui.setWidget(STATUS_KEY, [ctx.ui.theme.fg("dim", "Kimi usage loading…")]);
+			const snapshot = await fetchSnapshot(sessionAbort?.signal).catch(() => ({ quota: null, at: Date.now() }) as Snapshot);
 			if (!isCurrentSession(sessionId)) return;
 			if (snapshot.quota) {
 				ctx.ui.setStatus(STATUS_KEY, footer(ctx, snapshot.quota));
 				ctx.ui.setWidget(STATUS_KEY, detailLines(snapshot));
-				ctx.ui.notify("GLM usage refreshed", "info");
+				ctx.ui.notify("Kimi usage refreshed", "info");
 			} else {
 				ctx.ui.setWidget(STATUS_KEY, undefined);
-				ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "GLM usage unavailable"));
-				ctx.ui.notify("GLM usage unavailable — check ZAI_API_KEY / network", "error");
+				ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("error", "Kimi usage unavailable"));
+				ctx.ui.notify("Kimi usage unavailable — check KIMI_API_KEY / network", "error");
 			}
 		} catch (error) {
 			if (!handleStaleCtx(error)) throw error;
@@ -454,26 +432,26 @@ export default function (pi: ExtensionAPI) {
 		}, settings.refreshMs);
 	};
 
-	pi.registerCommand("glm", {
-		description: "Show Z.AI GLM Coding Plan usage (5h + weekly + MCP + 24h tokens)",
+	pi.registerCommand("kimi", {
+		description: "Show Kimi Coding Plan usage (5h + weekly quota windows)",
 		handler: async (_args, ctx) => {
 			await showDetail(ctx, activeSessionId);
 		},
 	});
 
-	pi.registerCommand("glm-usage:refresh", {
-		description: "Refresh the GLM usage footer now",
+	pi.registerCommand("kimi-usage:refresh", {
+		description: "Refresh the Kimi usage footer now",
 		handler: async (_args, ctx) => {
 			const sessionId = activeSessionId;
 			const ok = await refreshStatus(ctx, sessionId);
 			runWithLiveCtx(sessionId, () => {
-				if (ctx.hasUI) ctx.ui.notify(ok ? "GLM usage refreshed" : "GLM usage unavailable", ok ? "info" : "error");
+				if (ctx.hasUI) ctx.ui.notify(ok ? "Kimi usage refreshed" : "Kimi usage unavailable", ok ? "info" : "error");
 			});
 		},
 	});
 
-	pi.registerCommand("glm-usage:hide", {
-		description: "Hide the GLM usage detail panel",
+	pi.registerCommand("kimi-usage:hide", {
+		description: "Hide the Kimi usage detail panel",
 		handler: async (_args, ctx) => {
 			runWithLiveCtx(activeSessionId, () => {
 				if (ctx.hasUI) ctx.ui.setWidget(STATUS_KEY, undefined);
@@ -481,8 +459,8 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("glm-usage:settings", {
-		description: "Configure GLM usage auto-refresh cadence",
+	pi.registerCommand("kimi-usage:settings", {
+		description: "Configure Kimi usage auto-refresh cadence",
 		handler: async (_args, ctx) => {
 			const sessionId = activeSessionId;
 			try {
@@ -490,7 +468,7 @@ export default function (pi: ExtensionAPI) {
 				const current = settings.everyTurns > 0
 					? settings.everyTurns === 1 ? "Each turn" : `Every ${settings.everyTurns} turns`
 					: "Off";
-				const choice = await ctx.ui.select(`GLM usage auto-refresh (now: ${current})`, CADENCE_PRESETS.map((preset) => preset.label));
+				const choice = await ctx.ui.select(`Kimi usage auto-refresh (now: ${current})`, CADENCE_PRESETS.map((preset) => preset.label));
 				if (!choice || !isCurrentSession(sessionId)) return;
 				const preset = CADENCE_PRESETS.find((item) => item.label === choice);
 				if (!preset) return;
@@ -501,7 +479,7 @@ export default function (pi: ExtensionAPI) {
 				startTimer(ctx, sessionId);
 				setLoadingStatus(ctx, sessionId);
 				void refreshStatus(ctx, sessionId);
-				ctx.ui.notify(`GLM usage auto-refresh: ${choice}`, "info");
+				ctx.ui.notify(`Kimi usage auto-refresh: ${choice}`, "info");
 			} catch (error) {
 				if (!handleStaleCtx(error)) throw error;
 			}
@@ -509,24 +487,24 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerTool({
-		name: "glm_usage",
-		label: "GLM Usage",
-		description: "Check the user's Z.AI GLM Coding Plan usage: 5-hour and weekly quota remaining, MCP usage, and 24h token/call counts. Use when the user asks about their GLM quota, rate limits, or how much usage they have left.",
-		promptSnippet: "Check Z.AI GLM Coding Plan quota (5h / weekly remaining + 24h tokens)",
+		name: "kimi_usage",
+		label: "Kimi Usage",
+		description: "Check the user's Kimi (Moonshot AI) Coding Plan usage: 5-hour and weekly quota windows remaining, reset times, and max parallel sessions. Use when the user asks about their Kimi quota, rate limits, or how much usage they have left.",
+		promptSnippet: "Check Kimi Coding Plan quota (5h / weekly remaining)",
 		parameters: Type.Object({}),
 		async execute(_toolCallId, _params, signal) {
 			if (!getToken()) {
-				return { content: [{ type: "text", text: "ZAI_API_KEY is not set. Configure it to check GLM usage." }] };
+				return { content: [{ type: "text" as const, text: "KIMI_API_KEY is not set. Log in via /login (Kimi) or set KIMI_API_KEY to check Kimi usage." }], details: undefined };
 			}
 			try {
 				const snapshot = await fetchSnapshot(signal);
 				if (!snapshot.quota) {
-					return { content: [{ type: "text", text: "Could not fetch GLM usage (check ZAI_API_KEY / network)." }] };
+					return { content: [{ type: "text" as const, text: "Could not fetch Kimi usage (check KIMI_API_KEY / network)." }], details: undefined };
 				}
-				return { content: [{ type: "text", text: detailText(snapshot) }] };
+				return { content: [{ type: "text" as const, text: detailText(snapshot) }], details: undefined };
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
-				return { content: [{ type: "text", text: `GLM usage request failed: ${message}` }], isError: true };
+				throw new Error(`Kimi usage request failed: ${message}`);
 			}
 		},
 	});

@@ -1,14 +1,14 @@
 {
-  "name": "glm-usage-status",
+  "name": "kimi-usage-status",
   "version": "0.1.0",
-  "description": "Show Z.AI GLM Coding Plan usage (5h + weekly + MCP) in the pi status line.",
+  "description": "Show Kimi (Moonshot AI) Coding Plan usage (5h + weekly quota windows) in the pi status line.",
   "license": "MIT",
   "type": "module",
   "keywords": [
     "pi-package",
     "pi-extension",
-    "zai",
-    "glm",
+    "kimi",
+    "moonshot",
     "usage",
     "status-line"
   ],

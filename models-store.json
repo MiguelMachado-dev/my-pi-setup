@@ -164,6 +164,7 @@
         },
         "compat": {
           "supportsOpenAIGrammarTools": true,
+          "supportsAdditionalTools": true,
           "supportsToolSearch": true
         }
       },
@@ -202,6 +203,7 @@
         },
         "compat": {
           "supportsOpenAIGrammarTools": true,
+          "supportsAdditionalTools": true,
           "supportsToolSearch": true
         }
       },
@@ -240,13 +242,14 @@
         },
         "compat": {
           "supportsOpenAIGrammarTools": true,
+          "supportsAdditionalTools": true,
           "supportsToolSearch": true
         }
       }
     ],
-    "checkedAt": 1786202115765,
-    "lastModified": 1785502727000,
-    "etag": "W/\"400cac2d73673d9fff4c7d0ed22691b0\""
+    "checkedAt": 1786452769540,
+    "lastModified": 1786365287000,
+    "etag": "W/\"7572a78e60b78526600ed2a9b74b579d\""
   },
   "zai-coding-cn": {
     "models": [
@@ -366,7 +369,7 @@
         "maxTokens": 131072
       }
     ],
-    "checkedAt": 1786202115764,
+    "checkedAt": 1786475489861,
     "lastModified": 1785760832000,
     "etag": "W/\"945e2f90e309ee39540bedf1e418442a\""
   },
@@ -488,7 +491,7 @@
         "maxTokens": 131072
       }
     ],
-    "checkedAt": 1786202115765,
+    "checkedAt": 1786452769526,
     "lastModified": 1785760830000,
     "etag": "W/\"98c169c629803193583fc42e7311af91\""
   },
@@ -619,7 +622,7 @@
         "maxTokens": 32768
       }
     ],
-    "checkedAt": 1786167480238,
+    "checkedAt": 1786452769533,
     "lastModified": 1785146173000,
     "etag": "W/\"a5e501e93019dfc26a0076a002bd616a\""
   }

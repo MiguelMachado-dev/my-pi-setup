@@ -12,7 +12,8 @@
     "keepRecentTokens": 30000
   },
   "terminal": {
-    "showTerminalProgress": true
+    "showTerminalProgress": true,
+    "showImages": false
   },
   "theme": "ghostty-sync-545c9bd8",
   "packages": [

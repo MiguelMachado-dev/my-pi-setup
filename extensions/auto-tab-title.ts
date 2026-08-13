@@ -264,11 +264,30 @@ async function renameHerdrTab(pi: ExtensionAPI, title: string): Promise<void> {
 }
 
 export default function autoTabTitle(pi: ExtensionAPI) {
-  let launchedForThisRuntime = false;
+  let sessionEpoch = 0;
+  let sessionAllowsTitle = false;
+  let titleAttemptedForSession = false;
+
+  pi.on("session_start", (event) => {
+    sessionEpoch += 1;
+    sessionAllowsTitle = event.reason !== "resume";
+    titleAttemptedForSession = event.reason === "resume";
+  });
+
+  pi.on("session_shutdown", () => {
+    sessionEpoch += 1;
+    sessionAllowsTitle = false;
+  });
 
   pi.on("before_agent_start", (event, ctx) => {
     const config = readConfig();
-    if (launchedForThisRuntime || !config.enabled || isDisabledByEnv()) return;
+    if (
+      !sessionAllowsTitle ||
+      titleAttemptedForSession ||
+      !config.enabled ||
+      isDisabledByEnv()
+    )
+      return;
 
     const prompt = event.prompt.trim();
     const model = resolveTitleModel(ctx, config.model);
@@ -276,11 +295,12 @@ export default function autoTabTitle(pi: ExtensionAPI) {
     if (!prompt || !model) return;
 
     if (!isFirstUserMessage(ctx, prompt)) {
-      launchedForThisRuntime = true;
+      titleAttemptedForSession = true;
       return;
     }
 
-    launchedForThisRuntime = true;
+    const titleSessionEpoch = sessionEpoch;
+    titleAttemptedForSession = true;
 
     void (async () => {
       const title = await inferTitle(
@@ -289,7 +309,8 @@ export default function autoTabTitle(pi: ExtensionAPI) {
         prompt,
         config.reasoningEffort,
       );
-      if (!title) return;
+      if (!title || titleSessionEpoch !== sessionEpoch || !sessionAllowsTitle)
+        return;
 
       pi.setSessionName(title);
       await renameHerdrTab(pi, title);

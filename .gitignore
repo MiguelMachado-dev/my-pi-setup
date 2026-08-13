@@ -11,3 +11,10 @@ mcp-onboarding.json
 
 *.log
 .DS_Store
+
+/memory/
+/missions/
+/proofloop/
+/research/
+/run-history.jsonl
+/tmp/

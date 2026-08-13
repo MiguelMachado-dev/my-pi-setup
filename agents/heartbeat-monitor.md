@@ -2,7 +2,7 @@
 description: Read-only Luna supervisor for async workers, CI, tests, and deployments
 display_name: Luna Heartbeat
 model: openai-codex/gpt-5.6-luna
-thinking: medium
+thinking: max
 tools: read, grep, find, ls
 extensions: false
 skills: false

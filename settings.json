@@ -13,7 +13,7 @@
   },
   "terminal": {
     "showTerminalProgress": true,
-    "showImages": false
+    "showImages": true
   },
   "theme": "ghostty-sync-545c9bd8",
   "packages": [
@@ -22,7 +22,7 @@
     "npm:@juicesharp/rpiv-web-tools",
     "npm:@danchamorro/pi-prompt-enhancer",
     "npm:pi-rtk-optimizer",
-    "npm:@tintinweb/pi-subagents",
+    "npm:pi-subagents",
     "npm:@juicesharp/rpiv-todo",
     "npm:@juicesharp/rpiv-advisor",
     "npm:@juicesharp/rpiv-btw",
@@ -37,10 +37,13 @@
     },
     "npm:pi-skill-arg-hints",
     "npm:pi-mcp-adapter",
-    {
-      "source": "npm:@tunnckocore/pi-gpt-fast-mode",
-      "extensions": []
-    }
+    "npm:pi-paster",
+    "npm:pi-memory"
+  ],
+  "extensions": [
+    "-extensions/codex-usage-status/index.ts",
+    "-extensions/kimi-usage-status/index.ts",
+    "-extensions/qwen-usage.ts"
   ],
   "shellPath": "/opt/homebrew/bin/fish",
   "hideThinkingBlock": false,

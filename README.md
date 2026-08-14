@@ -6,13 +6,13 @@ Personal configuration for [Pi](https://github.com/mariozechner/pi-coding-agent)
 
 - `settings.json` — main Pi settings:
   - default provider: `openai-codex`
-  - default model: `gpt-5.5`
-  - thinking level: `high`
+  - default model: `gpt-5.6-sol`
+  - thinking level: `max`
   - active theme: `ghostty-sync-545c9bd8`
   - installed Pi packages
-- `mcp.json` — MCP imports and server configuration, including Atlassian MCP.
+- `mcp.json` — MCP server configuration, including Playwright browser automation.
 - `themes/` — local Pi theme files.
-- `.pi/gsd/` — GSD workflow package assets, prompts, agents, templates, hooks, and references.
+- `skills/` — vendored Pi skills stored as regular directories so a clone does not depend on `~/.agents/skills`.
 - `.gitignore` — excludes local auth, sessions, binaries, caches, logs, and OS files.
 
 ## Not included
@@ -42,29 +42,41 @@ mv ~/.pi/agent ~/.pi/agent.backup
 git clone https://github.com/MiguelMachado-dev/my-pi-setup.git ~/.pi/agent
 ```
 
-Then start Pi normally. Pi should read `settings.json`, `mcp.json`, packages, and theme configuration from this directory.
+Then start Pi normally. Pi should read `settings.json`, `mcp.json`, packages, themes, and the vendored skills from this directory.
+
+## Managing skills
+
+Skills in `skills/` are committed as regular directories rather than symlinks. This keeps the setup portable: cloning or pulling the repository also restores the skill contents, without requiring a separate `~/.agents/skills` installation.
+
+Install or refresh a skill specifically for Pi using copy mode:
+
+```bash
+npx skills@latest add <source> --global --agent pi --skill <skill-name> --copy --yes
+```
+
+After reviewing the resulting files, commit the skill directory normally. Avoid using a multi-agent symlink installation for repository-managed Pi skills, because it can replace these directories with links to files outside this repository.
 
 ## MCP setup
 
-This repo imports MCP configuration from Claude tools and defines an Atlassian server:
+This repo configures the Playwright MCP server for browser automation:
 
 ```json
 {
-  "imports": ["claude-code", "claude-desktop"],
+  "imports": [],
   "mcpServers": {
-    "atlassian": {
+    "playwright": {
       "command": "npx",
-      "args": ["-y", "mcp-remote@latest", "https://mcp.atlassian.com/v1/mcp/authv2"]
+      "args": ["-y", "@playwright/mcp@latest"]
     }
   }
 }
 ```
 
-Authentication and local onboarding state are not tracked. Re-authenticate MCP servers locally when needed.
+Local MCP cache and onboarding state are not tracked.
 
 ## Updating the repo
 
-After changing Pi settings, themes, prompts, agents, or workflows:
+After changing Pi settings, themes, prompts, agents, extensions, skills, or workflows:
 
 ```bash
 git status

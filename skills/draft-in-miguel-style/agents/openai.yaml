@@ -1,0 +1,11 @@
+interface:
+  display_name: Miguel Writing Style
+  short_description: "Draft concise messages in Miguel\u2019s voice"
+  default_prompt: Use $draft-in-miguel-style to draft this message in my usual voice.
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true

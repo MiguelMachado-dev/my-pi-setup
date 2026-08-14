@@ -1,0 +1,4 @@
+interface:
+  display_name: "Check UI"
+  short_description: "Browser-check changed UI with Playwright"
+  default_prompt: "Use $check-ui to verify the changed UI in a real browser with Playwright."

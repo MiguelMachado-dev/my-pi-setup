@@ -45,7 +45,8 @@
     "npm:pi-skill-arg-hints",
     "npm:pi-mcp-adapter",
     "npm:pi-paster",
-    "npm:pi-memory"
+    "npm:pi-memory",
+    "npm:pi-open-tui"
   ],
   "extensions": [
     "-extensions/codex-usage-status/index.ts",

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/badlogic/pi-mono/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
+  "$schema": "https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
   "name": "ghostty-sync-545c9bd8",
   "vars": {
     "bg": "#24273a",
@@ -47,8 +47,8 @@
     "mdLink": "link",
     "mdLinkUrl": "dim",
     "mdCode": "accent",
-    "mdCodeBlock": "",
-    "mdCodeBlockBorder": "borderMuted",
+    "mdCodeBlock": "success",
+    "mdCodeBlockBorder": "muted",
     "mdQuote": "muted",
     "mdQuoteBorder": "muted",
     "mdHr": "muted",

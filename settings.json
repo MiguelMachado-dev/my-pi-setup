@@ -1,22 +1,22 @@
 {
   "lastChangelogVersion": "0.84.2",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.6-sol",
+  "defaultProvider": "opencode-go",
+  "defaultModel": "ox-alpha-free",
   "defaultThinkingLevel": "max",
   "subagents": {
     "agentOverrides": {
       "reviewer": {
+        "model": "kimi-coding/k3",
+        "thinking": "max"
+      },
+      "delegate": {
+        "model": "opencode-go/ox-alpha-free",
         "thinking": "max"
       }
     }
   },
   "pi-gpt-fast-mode": {
-    "enabled": true
-  },
-  "compaction": {
-    "enabled": true,
-    "reserveTokens": 64000,
-    "keepRecentTokens": 30000
+    "enabled": false
   },
   "terminal": {
     "showTerminalProgress": true,
@@ -44,9 +44,7 @@
     },
     "npm:pi-skill-arg-hints",
     "npm:pi-mcp-adapter",
-    "npm:pi-paster",
-    "npm:pi-memory",
-    "npm:pi-open-tui"
+    "git:github.com/MiguelMachado-dev/pi-open-tui@4a4fae176c2e4ebea1fabd21a812da678429d8ec"
   ],
   "extensions": [
     "-extensions/codex-usage-status/index.ts",

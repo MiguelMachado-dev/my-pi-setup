@@ -1,0 +1,4 @@
+interface:
+  display_name: "Figma Fidelity Review"
+  short_description: "Turn visual gaps into exact CSS fixes"
+  default_prompt: "Use $figma-fidelity-review to compare my local page with its Figma design and return exact CSS and layout fixes."

@@ -1,7 +1,7 @@
 {
   "lastChangelogVersion": "0.84.2",
-  "defaultProvider": "opencode-go",
-  "defaultModel": "ox-alpha-free",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.6-sol",
   "defaultThinkingLevel": "max",
   "subagents": {
     "agentOverrides": {
@@ -10,7 +10,7 @@
         "thinking": "max"
       },
       "delegate": {
-        "model": "opencode-go/ox-alpha-free",
+        "model": "zai/glm-5.3",
         "thinking": "max"
       }
     }
@@ -37,14 +37,10 @@
     "npm:@juicesharp/rpiv-args",
     "npm:@aliou/pi-processes",
     "npm:@narumitw/pi-goal",
-    {
-      "source": "npm:pi-cmux",
-      "skills": [],
-      "prompts": []
-    },
     "npm:pi-skill-arg-hints",
     "npm:pi-mcp-adapter",
-    "git:github.com/MiguelMachado-dev/pi-open-tui@4a4fae176c2e4ebea1fabd21a812da678429d8ec"
+    "git:github.com/MiguelMachado-dev/pi-open-tui@4a4fae176c2e4ebea1fabd21a812da678429d8ec",
+    "git:github.com/DietrichGebert/ponytail"
   ],
   "extensions": [
     "-extensions/codex-usage-status/index.ts",

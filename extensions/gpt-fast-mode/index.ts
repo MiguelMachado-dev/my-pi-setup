@@ -1,8 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 export const SUPPORTED_MODELS = new Set([
   "openai/gpt-5.4",
@@ -37,25 +36,11 @@ const RAINBOW_COLORS = [
   [135, 95, 255],
   [215, 95, 255],
 ] as const;
-const RAINBOW_INTERVAL_MS = 120;
+const STATUS_ANIMATION_INTERVAL_MS = 120;
 const RESET_FOREGROUND = "\x1b[39m";
 
 type PiModel = { provider?: string; id?: string; reasoning?: boolean };
 type ProviderPayload = Record<string, unknown>;
-type UsageLike = {
-  input?: number;
-  output?: number;
-  cacheRead?: number;
-  cacheWrite?: number;
-  cost?: { total?: number };
-};
-type UsageTotals = {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  cost: number;
-};
 type PiConfig = Record<string, unknown>;
 type ReadTextFile = (path: string, encoding: "utf8") => string;
 
@@ -226,155 +211,49 @@ function rainbow(text: string, frame: number): string {
   return `${coloredText}${RESET_FOREGROUND}`;
 }
 
-function formatTokens(count: number): string {
-  if (count < 1_000) return count.toString();
-  if (count < 10_000) return `${(count / 1_000).toFixed(1)}k`;
-  if (count < 1_000_000) return `${Math.round(count / 1_000)}k`;
-  if (count < 10_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-  return `${Math.round(count / 1_000_000)}M`;
-}
-
-function formatProjectPath(cwd: string): string {
-  const home = homedir();
-  const resolvedCwd = resolve(cwd);
-  const resolvedHome = resolve(home);
-  const relativeToHome = relative(resolvedHome, resolvedCwd);
-  const insideHome =
-    relativeToHome === "" ||
-    (relativeToHome !== ".." && !relativeToHome.startsWith(`..${sep}`) && !isAbsolute(relativeToHome));
-
-  if (!insideHome) return cwd;
-  return relativeToHome === "" ? "~" : `~${sep}${relativeToHome}`;
-}
-
-function readUsage(entry: unknown): UsageLike | undefined {
-  if (!entry || typeof entry !== "object") return undefined;
-  const record = entry as Record<string, unknown>;
-
-  if (record.type === "message" && record.message && typeof record.message === "object") {
-    const message = record.message as Record<string, unknown>;
-    if (message.role !== "assistant" && message.role !== "toolResult") return undefined;
-    return message.usage as UsageLike | undefined;
-  }
-
-  if (record.type !== "branch_summary" && record.type !== "compaction") return undefined;
-  return record.usage as UsageLike | undefined;
-}
-
-function calculateUsage(entries: readonly unknown[]): UsageTotals {
-  const totals: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
-
-  for (const entry of entries) {
-    const usage = readUsage(entry);
-    if (!usage) continue;
-    totals.input += usage.input ?? 0;
-    totals.output += usage.output ?? 0;
-    totals.cacheRead += usage.cacheRead ?? 0;
-    totals.cacheWrite += usage.cacheWrite ?? 0;
-    totals.cost += usage.cost?.total ?? 0;
-  }
-
-  return totals;
-}
-
-function alignLine(left: string, right: string, width: number): string {
-  if (!right) return truncateToWidth(left, width, "...");
-
-  const rightWidth = visibleWidth(right);
-  if (rightWidth >= width) return truncateToWidth(right, width, "");
-
-  const leftWidth = Math.max(0, width - rightWidth - 2);
-  const truncatedLeft = truncateToWidth(left, leftWidth, "...");
-  const padding = " ".repeat(Math.max(2, width - visibleWidth(truncatedLeft) - rightWidth));
-  return truncateToWidth(`${truncatedLeft}${padding}${right}`, width, "");
-}
-
-function sanitizeStatus(text: string): string {
-  return text.replace(/[\r\n\t]/g, " ").replace(/ +/g, " ").trim();
-}
-
-function updateFooter(ctx: ExtensionContext, enabled: boolean): void {
-  ctx.ui.setFooter((tui, theme, footerData) => {
-    const unsubscribe = footerData.onBranchChange(() => tui.requestRender());
-    const animated = enabled && isSupportedModelContext(ctx);
-    let rainbowFrame = 0;
-    const animationTimer = animated
-      ? setInterval(() => {
-          rainbowFrame = (rainbowFrame + 1) % RAINBOW_COLORS.length;
-          tui.requestRender();
-        }, RAINBOW_INTERVAL_MS)
-      : undefined;
-
-    return {
-      dispose(): void {
-        unsubscribe();
-        if (animationTimer) clearInterval(animationTimer);
-      },
-      invalidate(): void {},
-      render(width: number): string[] {
-        let projectPath = formatProjectPath(ctx.cwd);
-        const branch = footerData.getGitBranch();
-        const sessionName = ctx.sessionManager.getSessionName();
-
-        if (branch) projectPath = `${projectPath} (${branch})`;
-        if (sessionName) projectPath = `${projectPath} • ${sessionName}`;
-
-        let fastLabel = "";
-        if (enabled && isSupportedModelContext(ctx)) {
-          fastLabel = `⚡ ${theme.bold(rainbow("FAST", rainbowFrame))}`;
-        }
-        if (enabled && !isSupportedModelContext(ctx)) {
-          fastLabel = theme.fg("muted", "⚡ FAST · unsupported");
-        }
-
-        const projectLine = alignLine(theme.fg("dim", projectPath), fastLabel, width);
-        const usage = calculateUsage(ctx.sessionManager.getEntries());
-        const stats: string[] = [];
-
-        if (usage.input) stats.push(`↑${formatTokens(usage.input)}`);
-        if (usage.output) stats.push(`↓${formatTokens(usage.output)}`);
-        if (usage.cacheRead) stats.push(`R${formatTokens(usage.cacheRead)}`);
-        if (usage.cacheWrite) stats.push(`W${formatTokens(usage.cacheWrite)}`);
-        if (usage.cost) stats.push(`$${usage.cost.toFixed(3)}`);
-
-        const contextUsage = ctx.getContextUsage();
-        const contextWindow = contextUsage?.contextWindow ?? ctx.model?.contextWindow ?? 0;
-        const contextPercent = contextUsage?.percent;
-        const contextLabel = contextPercent === null || contextPercent === undefined
-          ? `?/${formatTokens(contextWindow)}`
-          : `${contextPercent.toFixed(1)}%/${formatTokens(contextWindow)}`;
-        stats.push(contextLabel);
-
-        const modelName = ctx.model?.id ?? "no-model";
-        const thinking = ctx.model?.reasoning ? ` • ${ctx.thinkingLevel ?? "off"}` : "";
-        const provider = footerData.getAvailableProviderCount() > 1 && ctx.model ? `(${ctx.model.provider}) ` : "";
-        const statsLine = alignLine(
-          theme.fg("dim", stats.join(" ")),
-          theme.fg("dim", `${provider}${modelName}${thinking}`),
-          width,
-        );
-        const lines = [projectLine, statsLine];
-        const statuses = [...footerData.getExtensionStatuses().entries()]
-          .filter(([key]) => key !== "gpt-fast-mode")
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([, text]) => sanitizeStatus(text));
-
-        if (statuses.length > 0) {
-          lines.push(truncateToWidth(statuses.join(" "), width, theme.fg("dim", "...")));
-        }
-
-        return lines;
-      },
-    };
-  });
-}
-
 export default function fastModeExtension(pi: ExtensionAPI): void {
   let enabled = loadDefaultEnabled();
+  let statusAnimationTimer: ReturnType<typeof setInterval> | undefined;
+  let rainbowFrame = 0;
+
+  function stopStatusAnimation(): void {
+    if (statusAnimationTimer !== undefined) clearInterval(statusAnimationTimer);
+    statusAnimationTimer = undefined;
+    rainbowFrame = 0;
+  }
+
+  function updateFastModeIndicator(ctx: ExtensionContext): void {
+    stopStatusAnimation();
+    ctx.ui.setWidget(CONFIG_FIELD, undefined);
+
+    if (!enabled) {
+      ctx.ui.setStatus(CONFIG_FIELD, undefined);
+      return;
+    }
+
+    if (!isSupportedModelContext(ctx)) {
+      ctx.ui.setStatus(CONFIG_FIELD, "⚡ FAST · unsupported");
+      return;
+    }
+
+    if (ctx.mode !== "tui") {
+      ctx.ui.setStatus(CONFIG_FIELD, "⚡ FAST");
+      return;
+    }
+
+    function renderFrame(): void {
+      ctx.ui.setStatus(CONFIG_FIELD, `⚡ ${rainbow("FAST", rainbowFrame)}`);
+      rainbowFrame = (rainbowFrame + 1) % RAINBOW_COLORS.length;
+    }
+
+    renderFrame();
+    statusAnimationTimer = setInterval(renderFrame, STATUS_ANIMATION_INTERVAL_MS);
+    statusAnimationTimer.unref?.();
+  }
 
   async function toggle(ctx: ExtensionContext): Promise<void> {
     enabled = !enabled;
-    updateFooter(ctx, enabled);
+    updateFastModeIndicator(ctx);
     announceState(ctx, enabled);
   }
 
@@ -396,11 +275,17 @@ export default function fastModeExtension(pi: ExtensionAPI): void {
 
   pi.on("session_start", (_event, ctx) => {
     enabled = loadDefaultEnabled();
-    updateFooter(ctx, enabled);
+    updateFastModeIndicator(ctx);
   });
 
   pi.on("model_select", (_event, ctx) => {
-    updateFooter(ctx, enabled);
+    updateFastModeIndicator(ctx);
+  });
+
+  pi.on("session_shutdown", (_event, ctx) => {
+    stopStatusAnimation();
+    ctx.ui.setStatus(CONFIG_FIELD, undefined);
+    ctx.ui.setWidget(CONFIG_FIELD, undefined);
   });
 
   pi.on("before_provider_request", (event, ctx) => {

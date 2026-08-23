@@ -18,3 +18,8 @@ mcp-onboarding.json
 /research/
 /run-history.jsonl
 /tmp/
+
+# Stripe skills
+/skills/connect-recommend/
+/skills/connect-required-verification-information/
+/skills/*stripe*/

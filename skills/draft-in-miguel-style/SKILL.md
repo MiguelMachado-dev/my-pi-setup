@@ -1,6 +1,7 @@
 ---
 name: draft-in-miguel-style
 description: Draft or rewrite emails, Slack and chat messages, technical updates, requests, follow-ups, corrections, review replies, and short professional communication in Miguel's confirmed writing style, in Portuguese or English. Use when Miguel asks for a message or draft in his voice, wants text made natural and send-ready, asks to simplify wording without losing evidence, or needs concise communication that sounds like him.
+disable-model-invocation: true
 ---
 
 # Draft in Miguel's style
@@ -68,4 +69,3 @@ Before returning the draft, verify:
 - The reader can identify the decision, question, or next action.
 - A Slack draft uses prose rather than bullets unless requested.
 - The text is polished but still sounds like a person Miguel would plausibly be.
-

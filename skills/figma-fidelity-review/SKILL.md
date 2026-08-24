@@ -1,6 +1,7 @@
 ---
 name: figma-fidelity-review
 description: Compare a local web page or screenshot with a specific Figma frame and return measured, breakpoint-scoped CSS and layout fixes. Use for visual-fidelity reviews that need exact spacing, typography, sizing, or positioning changes rather than general design critique.
+disable-model-invocation: true
 ---
 
 # Figma Fidelity Review
@@ -39,7 +40,7 @@ For each candidate change, temporarily apply the CSS in DevTools or through reve
 Lead with the smallest set of changes that closes the observed gaps. Report findings in cascade order using these fields:
 
 | Scope | Element and evidence | Current implementation | Figma target | Exact fix | Confidence |
-| --- | --- | --- | --- | --- | --- |
+| ----- | -------------------- | ---------------------- | ------------ | --------- | ---------- |
 
 For every row:
 

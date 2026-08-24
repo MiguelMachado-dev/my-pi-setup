@@ -1,7 +1,7 @@
 {
-  "lastChangelogVersion": "0.84.2",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.6-sol",
+  "lastChangelogVersion": "0.84.3",
+  "defaultProvider": "zai",
+  "defaultModel": "glm-5.3",
   "defaultThinkingLevel": "max",
   "subagents": {
     "agentOverrides": {
@@ -25,7 +25,6 @@
   "theme": "ghostty-sync-545c9bd8",
   "packages": [
     "npm:@ogulcancelik/pi-ghostty-theme-sync",
-    "npm:@juicesharp/rpiv-ask-user-question",
     "npm:@juicesharp/rpiv-web-tools",
     "npm:@danchamorro/pi-prompt-enhancer",
     "npm:pi-rtk-optimizer",
@@ -36,7 +35,6 @@
     "npm:@juicesharp/rpiv-i18n",
     "npm:@juicesharp/rpiv-args",
     "npm:@aliou/pi-processes",
-    "npm:@narumitw/pi-goal",
     "npm:pi-skill-arg-hints",
     "npm:pi-mcp-adapter",
     "git:github.com/MiguelMachado-dev/pi-open-tui@4a4fae176c2e4ebea1fabd21a812da678429d8ec",

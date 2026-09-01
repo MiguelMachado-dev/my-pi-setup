@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.84.3",
+  "lastChangelogVersion": "0.84.4",
   "defaultProvider": "zai",
   "defaultModel": "glm-5.3",
   "defaultThinkingLevel": "max",
@@ -11,6 +11,9 @@
       },
       "delegate": {
         "model": "zai/glm-5.3",
+        "thinking": "max"
+      },
+      "worker": {
         "thinking": "max"
       }
     }
@@ -25,7 +28,6 @@
   "theme": "ghostty-sync-545c9bd8",
   "packages": [
     "npm:@ogulcancelik/pi-ghostty-theme-sync",
-    "npm:@juicesharp/rpiv-web-tools",
     "npm:@danchamorro/pi-prompt-enhancer",
     "npm:pi-rtk-optimizer",
     "npm:pi-subagents",
@@ -38,14 +40,15 @@
     "npm:pi-skill-arg-hints",
     "npm:pi-mcp-adapter",
     "git:github.com/MiguelMachado-dev/pi-open-tui@4a4fae176c2e4ebea1fabd21a812da678429d8ec",
-    "git:github.com/DietrichGebert/ponytail"
+    "git:github.com/DietrichGebert/ponytail",
+    "npm:pi-web-access"
   ],
   "extensions": [
     "-extensions/codex-usage-status/index.ts",
     "-extensions/kimi-usage-status/index.ts",
     "-extensions/qwen-usage.ts"
   ],
-  "shellPath": "/opt/homebrew/bin/fish",
+  "shellPath": "/bin/zsh",
   "hideThinkingBlock": false,
   "tuiMode": "fullscreen"
 }
